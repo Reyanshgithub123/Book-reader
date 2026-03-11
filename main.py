@@ -1,38 +1,100 @@
-from scraper.bestseller_scraper import scrape_bestseller_page
-from scraper.book_scraper import scrape_book_details
-from processing.clean_data import clean_dataset
+import requests
+from bs4 import BeautifulSoup
 import pandas as pd
+import re
 import time
 
+headers = {
+"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
 
-def main():
+pages = [
+"https://www.amazon.com/Best-Sellers-Kindle-Store-Paranormal-Romance/zgbs/digital-text/6190484011",
+"https://www.amazon.com/Best-Sellers-Kindle-Store-Paranormal-Romance/zgbs/digital-text/6190484011/ref=zg_bs_pg_2?_encoding=UTF8&pg=2"
+]
 
-    print("Scraping bestseller page...")
+def get_int(x):
+    if not x:
+        return None
+    x = x.replace(",","")
+    m = re.findall(r"\d+",x)
+    return int(m[0]) if m else None
 
-    books = scrape_bestseller_page()
+def get_float(x):
+    if not x:
+        return None
+    m = re.findall(r"\d+\.\d+",x)
+    return float(m[0]) if m else None
 
-    print("Total books found:", len(books))
+
+books_data = []
+
+for page in pages:
+
+    print("Scraping:",page)
+
+    r = requests.get(page,headers=headers)
+    soup = BeautifulSoup(r.text,"lxml")
+
+    books = soup.select("div.p13n-sc-uncoverable-faceout")
+
+    print("Books found:",len(books))
 
     for book in books:
 
-        print("Processing:", book["title"])
+        try:
+            rank = get_int(book.select_one(".zg-bdg-text").text)
+        except:
+            rank=None
 
-        desc, pub, date = scrape_book_details(book["url"])
+        try:
+            title = book.select_one("img")["alt"]
+        except:
+            title=""
 
-        book["description"] = desc
-        book["publisher"] = pub
-        book["publication_date"] = date
+        try:
+            author = book.select_one(".a-size-small.a-link-child").text.strip()
+        except:
+            author=""
 
-        time.sleep(2)
+        try:
+            rating = get_float(book.select_one(".a-icon-alt").text)
+        except:
+            rating=None
 
-    df = pd.DataFrame(books)
+        try:
+            reviews = get_int(book.select_one("span.a-size-small[aria-hidden='true']").text)
+        except:
+            reviews=None
 
-    df = clean_dataset(df)
+        try:
+            price = get_float(book.select_one("span._cDEzb_p13n-sc-price_3mJ9Z").text)
+        except:
+            price=None
 
-    df.to_csv("output/kindle_dataset.csv", index=False)
+        try:
+            link = book.select_one("a.a-link-normal")["href"]
+            url = "https://www.amazon.com"+link.split("?")[0]
+        except:
+            url=""
 
-    print("Dataset saved to output/kindle_dataset.csv")
+        books_data.append({
+            "rank":rank,
+            "title":title,
+            "author":author,
+            "rating":rating,
+            "reviews":reviews,
+            "price":price,
+            "url":url
+        })
+
+    time.sleep(2)
 
 
-if __name__ == "__main__":
-    main()
+df = pd.DataFrame(books_data)
+
+df = df.sort_values("rank")
+
+df.to_csv("kindle_books.csv",index=False)
+
+print("✅ CSV created with",len(df),"books")
