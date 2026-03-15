@@ -96,6 +96,6 @@ df = pd.DataFrame(books_data)
 df = df.sort_values("rank")
 
 df.to_csv("kindle_books.csv",index=False)
-
+print(df)
 print("✅ CSV created with",len(df),"books")
 print("100 books csv with description and author")
